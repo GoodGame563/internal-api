@@ -45,7 +45,7 @@ impl ParserIntegrationService  for ParserIntegrationServer  {
     ) -> Result<Response<ParsedContentResponse>, Status> {
         let input = request.into_inner().query_id;
         let client = &self.pool.get().await.map_err(handle_pool_error)?;
-        let keyword_and_product_id_query = client.query("SELECT keywords.keyword_text FROM public.keyword_products join keywords on keywords.keyword_id = keyword_products.keyword_id  where keyword_products.product_id = $1 limit 30;", &[&input]).await.map_err(handle_db_error)?;
+        let keyword_and_product_id_query = client.query("SELECT * FROM get_product_keywords($1);", &[&input]).await.map_err(handle_db_error)?;
         let mut words = Vec::new();
         for query in keyword_and_product_id_query{
             let answer = KeywordAndProductId::from_row(query).map_err(handle_pool_error)?;
