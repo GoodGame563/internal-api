@@ -1,29 +1,28 @@
-use deadpool_postgres::{Pool, ManagerConfig, RecyclingMethod, Runtime, PoolError};
+use api::{
+    parser_integration_service_server::{ParserIntegrationService, ParserIntegrationServiceServer},
+    ParsedContentResponse, ParserQueryRequest,
+};
+use deadpool_postgres::{ManagerConfig, Pool, PoolError, RecyclingMethod, Runtime};
 use dotenvy::dotenv;
 use tokio_postgres::NoTls;
 use tonic::{transport::Server, Request, Response, Status};
-use api::{
-    parser_integration_service_server::{ParserIntegrationService, ParserIntegrationServiceServer},
-    ParserQueryRequest, ParsedContentResponse,
-};
 
 pub mod api {
     tonic::include_proto!("api");
 }
 
 #[derive(Debug)]
-struct ParserIntegrationServer{
-    pool: Pool
+struct ParserIntegrationServer {
+    pool: Pool,
 }
 
-
-struct KeywordAndProductId{
+struct KeywordAndProductId {
     keyword_text: String,
 }
 
 impl KeywordAndProductId {
     fn from_row(row: tokio_postgres::Row) -> Result<Self, PoolError> {
-        Ok(KeywordAndProductId{
+        Ok(KeywordAndProductId {
             keyword_text: row.get("keyword_text"),
         })
     }
@@ -38,22 +37,25 @@ fn handle_pool_error(e: PoolError) -> Status {
 }
 
 #[tonic::async_trait]
-impl ParserIntegrationService  for ParserIntegrationServer  {
+impl ParserIntegrationService for ParserIntegrationServer {
     async fn get_parsed_content(
         &self,
         request: Request<ParserQueryRequest>,
     ) -> Result<Response<ParsedContentResponse>, Status> {
         let input = request.into_inner().query_id;
         let client = &self.pool.get().await.map_err(handle_pool_error)?;
-        let keyword_and_product_id_query = client.query("SELECT * FROM get_product_keywords($1);", &[&input]).await.map_err(handle_db_error)?;
+        let keyword_and_product_id_query = client
+            .query("SELECT * FROM get_product_keywords($1);", &[&input])
+            .await
+            .map_err(handle_db_error)?;
         let mut words = Vec::new();
-        for query in keyword_and_product_id_query{
+        for query in keyword_and_product_id_query {
             let answer = KeywordAndProductId::from_row(query).map_err(handle_pool_error)?;
             words.push(answer.keyword_text);
         }
 
         Ok(Response::new(ParsedContentResponse {
-            parsed_terms: words
+            parsed_terms: words,
         }))
     }
 }
@@ -76,13 +78,14 @@ impl Config {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
     use std::env;
-    let out_dir = env::var("PG__HOST").unwrap();    
+    let out_dir = env::var("PG__HOST").unwrap();
     println!("{}", out_dir);
     let pool_size: u32 = 20;
     let cfg = Config::from_env()?;
 
-    let mgr = deadpool_postgres::Manager::new(cfg.pg.get_pg_config().expect("Not find env file"), NoTls);
-        
+    let mgr =
+        deadpool_postgres::Manager::new(cfg.pg.get_pg_config().expect("Not find env file"), NoTls);
+
     ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     };
@@ -93,13 +96,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .unwrap();
     let addr = format!("0.0.0.0:{}", dotenvy::var("PORT")?).parse()?;
-    let processor = ParserIntegrationServer{
-        pool
-    };
+    let processor = ParserIntegrationServer { pool };
     Server::builder()
         .add_service(ParserIntegrationServiceServer::new(processor))
         .serve(addr)
         .await?;
     Ok(())
-  
 }
