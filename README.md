@@ -52,7 +52,3 @@ The internal-api service acts as a backend integration layer, handling communica
 ## Development Notes
 - Rust, tonic (gRPC), deadpool-postgres
 - See thesis for full integration details, workflow, and error handling strategies
-- Refer to `README.alt1.md` and original README for more details
-
----
-This is a highly detailed README for thesis documentation. Do not overwrite the original README if present.
